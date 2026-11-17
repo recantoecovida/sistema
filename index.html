@@ -288,7 +288,7 @@ function paraLinhas(){
     {user_id:USER_ID, chave:'etapas', valor:db.etapas},
     {user_id:USER_ID, chave:'categorias', valor:db.categorias}
   ];
-  L.financeiro_lancamentos = db.lancamentos.map(l => ({id:l.id, user_id:USER_ID, tipo:l.tipo, data:l.data, descricao:l.descricao, valor:l.valor, categoria:l.categoria||null}));
+  L.financeiro_lancamentos = db.lancamentos.map(l => ({id:l.id, user_id:USER_ID, reserva_id:l.reservaId||null, tipo:l.tipo, data:l.data, descricao:l.descricao, valor:l.valor, categoria:l.categoria||null}));
   L.estoque_produtos = db.produtos.map(p => ({id:p.id, user_id:USER_ID, nome:p.nome, unidade:p.unidade||'un', quantidade:p.quantidade, minimo:p.minimo}));
   L.estoque_movimentos = db.movimentos.map(m => ({id:m.id, user_id:USER_ID, produto_id:m.produtoId, tipo:m.tipo, qtd:m.qtd, data:m.data, obs:m.obs||null}));
   L.funcionarios = db.funcionarios.map(f => ({id:f.id, user_id:USER_ID, nome:f.nome, funcao:f.funcao||null, contato:f.contato||null, admissao:f.admissao||null, status:f.status}));
@@ -357,7 +357,7 @@ async function carregarDados(){
     })),
     etapas: conf.etapas || base.etapas,
     categorias: conf.categorias || base.categorias,
-    lancamentos: lanc.map(l => ({id:l.id, tipo:l.tipo, data:l.data, descricao:l.descricao, valor:Number(l.valor), categoria:l.categoria||''})),
+    lancamentos: lanc.map(l => ({id:l.id, reservaId:l.reserva_id||'', tipo:l.tipo, data:l.data, descricao:l.descricao, valor:Number(l.valor), categoria:l.categoria||''})),
     produtos: prod.map(p => ({id:p.id, nome:p.nome, unidade:p.unidade, quantidade:Number(p.quantidade), minimo:Number(p.minimo)})),
     movimentos: movs.map(m => ({id:m.id, produtoId:m.produto_id, tipo:m.tipo, qtd:Number(m.qtd), data:m.data, obs:m.obs||''})),
     funcionarios: func.map(f => ({id:f.id, nome:f.nome, funcao:f.funcao||'', contato:f.contato||'', admissao:f.admissao||'', status:f.status})),
@@ -589,12 +589,33 @@ function resolverCliente(d){
   db.clientes.push(c);
   return c;
 }
+const CATEGORIA_RESERVA = 'Hospedagem';
+function ajustarLancamentoReserva(r){
+  const existente = db.lancamentos.find(l => l.reservaId === r.id);
+  const deve = r.status !== 'cancelada' && r.valor != null && r.valor > 0;
+  if (!deve) {
+    if (existente) db.lancamentos = db.lancamentos.filter(l => l !== existente);
+    return;
+  }
+  if (!db.categorias.includes(CATEGORIA_RESERVA) && db.categorias.length < MAX_CATEGORIAS) db.categorias.push(CATEGORIA_RESERVA);
+  const dados = {
+    tipo: 'receita',
+    data: r.checkin,
+    descricao: `Reserva: ${r.nome} (${dataBR(r.checkin)} a ${dataBR(r.checkout)})`,
+    valor: r.valor,
+    categoria: db.categorias.includes(CATEGORIA_RESERVA) ? CATEGORIA_RESERVA : (db.categorias[0] || '')
+  };
+  if (existente) Object.assign(existente, dados);
+  else db.lancamentos.push({id:uid(), reservaId:r.id, ...dados});
+}
 function formReserva(titulo, r, id, ciPadrao){
   formulario(titulo, camposReserva(r, ciPadrao), d => {
     const e = validarReserva(d, id); if (e) return e;
     const dados = dadosReserva(d, resolverCliente(d));
+    let reserva = r;
     if (r && id) Object.assign(r, dados);
-    else db.reservas.push({id:uid(), ...dados});
+    else { reserva = {id:uid(), ...dados}; db.reservas.push(reserva); }
+    ajustarLancamentoReserva(reserva);
     return null;
   });
 }
@@ -640,6 +661,7 @@ acoes.confirmarReserva = id => {
 acoes.excluirReserva = id => {
   if (!confirm('Excluir esta reserva?')) return;
   db.reservas = db.reservas.filter(r => r.id !== id);
+  db.lancamentos = db.lancamentos.filter(l => l.reservaId !== id);
   salvar(); fecharModal(); render();
 };
 
@@ -1037,7 +1059,7 @@ function telaIns(){
   return `
   <section class="cabeca">
     <div><h1>Insumos</h1><p class="sub">Cadastro de insumos e registro de consumo</p></div>
-    <div class="acoes-topo"><button class="sec" data-acao="carregarSugestoes">Carregar lista sugerida</button><button class="sec" data-acao="novoInsumo">+ Insumo</button><button data-acao="novoConsumo">+ Registrar consumo</button></div>
+    <div class="acoes-topo"><button class="sec" data-acao="novoInsumo">+ Insumo</button><button data-acao="novoConsumo">+ Registrar consumo</button></div>
   </section>
   <div id="lista"></div>`;
 }
@@ -1119,11 +1141,12 @@ acoes.excluirInsumo = id => {
 acoes.novoConsumo = () => {
   if (!db.insumos.length) { alert('Cadastre um insumo primeiro.'); return; }
   formulario('Registrar consumo', `
-    ${select('Insumo','insumoId', db.insumos.map(i => [i.id, `${i.nome} (${fmtQtd(i.quantidade)} ${i.unidade} em estoque)`]), db.insumos[0].id)}
+    <label class="campo">Insumo *<input name="insumo" list="lista-insumos" autocomplete="off" placeholder="Digite o nome para buscar"></label>
+    <datalist id="lista-insumos">${[...db.insumos].sort(porNome).map(i => `<option value="${esc(i.nome)}">${fmtQtd(i.quantidade)} ${esc(i.unidade)} em estoque</option>`).join('')}</datalist>
     <div class="grade">${campo('Quantidade *','qtd','','text','inputmode="decimal"')}${campo('Data','data',hojeISO(),'date')}</div>
     ${campo('Observação','obs','')}`, d => {
-      const i = achar(db.insumos, d.insumoId);
-      if (!i) return 'Insumo inválido.';
+      const i = db.insumos.find(x => x.nome.toLowerCase() === (d.insumo || '').toLowerCase());
+      if (!i) return 'Insumo não encontrado. Escolha um da lista ao digitar.';
       const q = parseValor(d.qtd);
       if (!(q > 0)) return 'Informe uma quantidade maior que zero.';
       if (q > i.quantidade) return `Estoque insuficiente. Disponível: ${fmtQtd(i.quantidade)} ${i.unidade}.`;
@@ -1139,16 +1162,6 @@ acoes.excluirConsumo = id => {
     if (i) i.quantidade = arred(i.quantidade + c.qtd);
   }
   db.consumos = db.consumos.filter(x => x.id !== id);
-  salvar(); render();
-};
-
-const SUGESTOES_INSUMOS = [["Detergente", "L"], ["Sabão em pó", "kg"], ["Amaciante", "L"], ["Desinfetante", "L"], ["Água sanitária", "L"], ["Álcool 70%", "L"], ["Saponáceo", "un"], ["Desengordurante", "L"], ["Esponja de limpeza", "un"], ["Pano de chão", "un"], ["Papel toalha", "rolo"], ["Saco de lixo", "pacote"], ["Luva de borracha", "par"], ["Papel higiênico", "rolo"], ["Sabonete em barra", "un"], ["Sabonete líquido", "L"], ["Shampoo", "L"], ["Condicionador", "L"], ["Creme dental", "un"], ["Escova de dente", "un"], ["Algodão", "pacote"], ["Café", "kg"], ["Açúcar", "kg"], ["Sal", "kg"], ["Óleo de cozinha", "L"], ["Azeite", "L"], ["Temperos", "un"], ["Filtro de café", "un"], ["Copo descartável", "pacote"], ["Prato e talher descartável", "pacote"], ["Guardanapo", "pacote"], ["Sachê de chá", "caixa"], ["Leite", "L"], ["Pão", "un"], ["Ovo", "dúzia"], ["Água mineral (galão 20 L)", "galão"], ["Água com gás", "garrafa"], ["Refrigerante", "garrafa"], ["Gelo", "saco"], ["Gás de cozinha (botijão 13 kg)", "botijão"], ["Lenha", "carga"], ["Carvão", "kg"], ["Gasolina ou diesel (gerador)", "L"], ["Querosene (lampião)", "L"], ["Cloro para piscina", "kg"], ["Redutor de pH", "kg"], ["Elevador de pH", "kg"], ["Algicida", "L"], ["Floculante", "L"], ["Adubo orgânico", "kg"], ["Terra vegetal", "saco"], ["Sementes", "pacote"], ["Biofertilizante", "L"], ["Óleo de neem", "L"], ["Sacos para compostagem", "pacote"], ["Lâmpada", "un"], ["Pilha", "un"], ["Fita isolante", "un"], ["Fita veda-rosca", "un"], ["Silicone", "tubo"], ["Lubrificante multiuso", "un"], ["Tinta", "L"], ["Vela de filtro de água", "un"], ["Repelente", "un"], ["Espiral contra mosquitos", "caixa"], ["Álcool gel", "L"], ["Curativo", "pacote"], ["Antisséptico", "un"], ["Gaze", "pacote"], ["Analgésico e antialérgico", "cartela"], ["Lençol", "un"], ["Fronha", "un"], ["Toalha de banho", "un"], ["Toalha de rosto", "un"], ["Toalha de mesa", "un"], ["Sabão de coco", "un"], ["Produto de limpeza biodegradável", "L"], ["Sacos biodegradáveis", "pacote"], ["Canudo de inox", "un"]];
-acoes.carregarSugestoes = () => {
-  const existentes = new Set(db.insumos.map(i => i.nome.toLowerCase()));
-  const novos = SUGESTOES_INSUMOS.filter(([nome]) => !existentes.has(nome.toLowerCase()));
-  if (!novos.length) { alert('Todos os insumos sugeridos já estão cadastrados.'); return; }
-  if (!confirm(`Adicionar ${novos.length} insumos sugeridos com quantidade zero? Os que já existem não serão duplicados.`)) return;
-  novos.forEach(([nome, unidade]) => db.insumos.push({id:uid(), nome, unidade, quantidade:0}));
   salvar(); render();
 };
 
