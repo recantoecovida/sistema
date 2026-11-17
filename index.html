@@ -1037,7 +1037,7 @@ function telaIns(){
   return `
   <section class="cabeca">
     <div><h1>Insumos</h1><p class="sub">Cadastro de insumos e registro de consumo</p></div>
-    <div class="acoes-topo"><button class="sec" data-acao="novoInsumo">+ Insumo</button><button data-acao="novoConsumo">+ Registrar consumo</button></div>
+    <div class="acoes-topo"><button class="sec" data-acao="carregarSugestoes">Carregar lista sugerida</button><button class="sec" data-acao="novoInsumo">+ Insumo</button><button data-acao="novoConsumo">+ Registrar consumo</button></div>
   </section>
   <div id="lista"></div>`;
 }
@@ -1139,6 +1139,16 @@ acoes.excluirConsumo = id => {
     if (i) i.quantidade = arred(i.quantidade + c.qtd);
   }
   db.consumos = db.consumos.filter(x => x.id !== id);
+  salvar(); render();
+};
+
+const SUGESTOES_INSUMOS = [["Detergente", "L"], ["Sabão em pó", "kg"], ["Amaciante", "L"], ["Desinfetante", "L"], ["Água sanitária", "L"], ["Álcool 70%", "L"], ["Saponáceo", "un"], ["Desengordurante", "L"], ["Esponja de limpeza", "un"], ["Pano de chão", "un"], ["Papel toalha", "rolo"], ["Saco de lixo", "pacote"], ["Luva de borracha", "par"], ["Papel higiênico", "rolo"], ["Sabonete em barra", "un"], ["Sabonete líquido", "L"], ["Shampoo", "L"], ["Condicionador", "L"], ["Creme dental", "un"], ["Escova de dente", "un"], ["Algodão", "pacote"], ["Café", "kg"], ["Açúcar", "kg"], ["Sal", "kg"], ["Óleo de cozinha", "L"], ["Azeite", "L"], ["Temperos", "un"], ["Filtro de café", "un"], ["Copo descartável", "pacote"], ["Prato e talher descartável", "pacote"], ["Guardanapo", "pacote"], ["Sachê de chá", "caixa"], ["Leite", "L"], ["Pão", "un"], ["Ovo", "dúzia"], ["Água mineral (galão 20 L)", "galão"], ["Água com gás", "garrafa"], ["Refrigerante", "garrafa"], ["Gelo", "saco"], ["Gás de cozinha (botijão 13 kg)", "botijão"], ["Lenha", "carga"], ["Carvão", "kg"], ["Gasolina ou diesel (gerador)", "L"], ["Querosene (lampião)", "L"], ["Cloro para piscina", "kg"], ["Redutor de pH", "kg"], ["Elevador de pH", "kg"], ["Algicida", "L"], ["Floculante", "L"], ["Adubo orgânico", "kg"], ["Terra vegetal", "saco"], ["Sementes", "pacote"], ["Biofertilizante", "L"], ["Óleo de neem", "L"], ["Sacos para compostagem", "pacote"], ["Lâmpada", "un"], ["Pilha", "un"], ["Fita isolante", "un"], ["Fita veda-rosca", "un"], ["Silicone", "tubo"], ["Lubrificante multiuso", "un"], ["Tinta", "L"], ["Vela de filtro de água", "un"], ["Repelente", "un"], ["Espiral contra mosquitos", "caixa"], ["Álcool gel", "L"], ["Curativo", "pacote"], ["Antisséptico", "un"], ["Gaze", "pacote"], ["Analgésico e antialérgico", "cartela"], ["Lençol", "un"], ["Fronha", "un"], ["Toalha de banho", "un"], ["Toalha de rosto", "un"], ["Toalha de mesa", "un"], ["Sabão de coco", "un"], ["Produto de limpeza biodegradável", "L"], ["Sacos biodegradáveis", "pacote"], ["Canudo de inox", "un"]];
+acoes.carregarSugestoes = () => {
+  const existentes = new Set(db.insumos.map(i => i.nome.toLowerCase()));
+  const novos = SUGESTOES_INSUMOS.filter(([nome]) => !existentes.has(nome.toLowerCase()));
+  if (!novos.length) { alert('Todos os insumos sugeridos já estão cadastrados.'); return; }
+  if (!confirm(`Adicionar ${novos.length} insumos sugeridos com quantidade zero? Os que já existem não serão duplicados.`)) return;
+  novos.forEach(([nome, unidade]) => db.insumos.push({id:uid(), nome, unidade, quantidade:0}));
   salvar(); render();
 };
 
