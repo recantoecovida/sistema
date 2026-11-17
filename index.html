@@ -345,7 +345,10 @@ async function sincronizar(){
 async function carregarDados(){
   const res = await Promise.all(TABELAS.map(t => sb.from(t).select('*')));
   res.forEach(r => { if (r.error) throw r.error; });
-  const [contatos, hist, cfg, lanc, prod, movs, func, ins, cons, resv] = res.map(r => r.data);
+  const D = Object.fromEntries(TABELAS.map((t, i) => [t, res[i].data]));
+  const contatos = D.crm_contatos, hist = D.crm_historico, cfg = D.configuracoes, resv = D.reservas,
+        lanc = D.financeiro_lancamentos, prod = D.estoque_produtos, movs = D.estoque_movimentos,
+        func = D.funcionarios, ins = D.insumos, cons = D.insumos_consumos;
   const conf = Object.fromEntries(cfg.map(c => [c.chave, c.valor]));
   const base = padrao();
   db = {
