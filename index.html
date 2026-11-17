@@ -89,7 +89,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 .cols-fin{grid-template-columns:.9fr 2.2fr 1.3fr 1fr 1.2fr auto}
 .cols-est{grid-template-columns:2fr 1fr .8fr 1.4fr auto}
 .cols-fun{grid-template-columns:1.6fr 1.2fr 1.3fr .9fr .9fr auto}
-.cols-ins{grid-template-columns:2fr 1fr 1.2fr auto}
+.cols-ins{grid-template-columns:2fr 1fr 1.2fr 1.2fr auto}
 .cols-cons{grid-template-columns:.9fr 1.5fr 1fr 2fr auto}
 .cols-mov{grid-template-columns:.9fr 1fr 1fr 2fr}
 .linha select{width:auto;padding:6px 10px;font-size:13px;border-radius:8px}
@@ -292,7 +292,7 @@ function paraLinhas(){
   L.estoque_produtos = db.produtos.map(p => ({id:p.id, user_id:USER_ID, nome:p.nome, unidade:p.unidade||'un', quantidade:p.quantidade, minimo:p.minimo}));
   L.estoque_movimentos = db.movimentos.map(m => ({id:m.id, user_id:USER_ID, produto_id:m.produtoId, tipo:m.tipo, qtd:m.qtd, data:m.data, obs:m.obs||null}));
   L.funcionarios = db.funcionarios.map(f => ({id:f.id, user_id:USER_ID, nome:f.nome, funcao:f.funcao||null, contato:f.contato||null, admissao:f.admissao||null, status:f.status}));
-  L.insumos = db.insumos.map(i => ({id:i.id, user_id:USER_ID, nome:i.nome, unidade:i.unidade||'un'}));
+  L.insumos = db.insumos.map(i => ({id:i.id, user_id:USER_ID, nome:i.nome, unidade:i.unidade||'un', quantidade:i.quantidade||0}));
   L.insumos_consumos = db.consumos.map(c => ({id:c.id, user_id:USER_ID, insumo_id:c.insumoId, qtd:c.qtd, data:c.data, obs:c.obs||null}));
   L.reservas = db.reservas.map(r => ({id:r.id, user_id:USER_ID, cliente_id:r.clienteId||null, nome:r.nome, telefone:r.telefone||null, checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||null}));
   return L;
@@ -361,7 +361,7 @@ async function carregarDados(){
     produtos: prod.map(p => ({id:p.id, nome:p.nome, unidade:p.unidade, quantidade:Number(p.quantidade), minimo:Number(p.minimo)})),
     movimentos: movs.map(m => ({id:m.id, produtoId:m.produto_id, tipo:m.tipo, qtd:Number(m.qtd), data:m.data, obs:m.obs||''})),
     funcionarios: func.map(f => ({id:f.id, nome:f.nome, funcao:f.funcao||'', contato:f.contato||'', admissao:f.admissao||'', status:f.status})),
-    insumos: ins.map(i => ({id:i.id, nome:i.nome, unidade:i.unidade})),
+    insumos: ins.map(i => ({id:i.id, nome:i.nome, unidade:i.unidade, quantidade:Number(i.quantidade||0)})),
     consumos: cons.map(c => ({id:c.id, insumoId:c.insumo_id, qtd:Number(c.qtd), data:c.data, obs:c.obs||''})),
     reservas: resv.map(r => ({id:r.id, clienteId:r.cliente_id||'', nome:r.nome, telefone:r.telefone||'', checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||''}))
   };
@@ -1041,19 +1041,25 @@ function telaIns(){
   </section>
   <div id="lista"></div>`;
 }
+const arred = x => Math.round(x * 1000) / 1000;
 function listaIns(){
   const consumos = [...db.consumos].sort((a,b) => b.data.localeCompare(a.data));
   const totais = db.insumos.map(i => ({i, total: db.consumos.filter(c => c.insumoId === i.id).reduce((s,c) => s + c.qtd, 0)}));
   return `
   <h2 class="secao">Insumos cadastrados</h2>
   ${db.insumos.length ? `<div class="tabela">
-    <div class="linha cab cols-ins"><span>Insumo</span><span>Unidade</span><span class="dir">Total consumido</span><span></span></div>
+    <div class="linha cab cols-ins"><span>Insumo</span><span>Unidade</span><span class="dir">Em estoque</span><span class="dir">Total consumido</span><span></span></div>
     ${totais.map(({i,total}) => `
       <div class="linha cols-ins">
         <span class="destaque" data-acao="editarInsumo" data-id="${i.id}">${esc(i.nome)}</span>
         <span>${esc(i.unidade)}</span>
+        <span class="dir"><b class="tag ${i.quantidade <= 0 ? 'verm' : 'verde'}">${fmtQtd(i.quantidade)} ${esc(i.unidade)}</b></span>
         <span class="dir">${fmtQtd(total)} ${esc(i.unidade)}</span>
-        <span class="acoes-linha"><button class="sec pequeno" data-acao="excluirInsumo" data-id="${i.id}">Excluir</button></span>
+        <span class="acoes-linha">
+          <button class="sec pequeno" data-acao="entradaInsumo" data-id="${i.id}">Entrada</button>
+          <button class="sec pequeno" data-acao="editarInsumo" data-id="${i.id}">Editar</button>
+          <button class="sec pequeno" data-acao="excluirInsumo" data-id="${i.id}">Excluir</button>
+        </span>
       </div>`).join('')}
   </div>` : vazio('Nenhum insumo cadastrado.')}
 
@@ -1072,17 +1078,35 @@ function listaIns(){
     }).join('')}
   </div>` : vazio('Nenhum consumo registrado.')}`;
 }
-const camposInsumo = (i={}) => `${campo('Nome do insumo *','nome',i.nome||'')}${campo('Unidade de medida','unidade',i.unidade||'un')}`;
+const camposInsumo = (i={}) => `
+  ${campo('Nome do insumo *','nome', i.nome||'')}
+  <div class="grade">
+    ${campo('Unidade de medida','unidade', i.unidade||'un')}
+    ${campo('Quantidade em estoque','quantidade', i.quantidade!=null ? String(i.quantidade).replace('.',',') : '0', 'text', 'inputmode="decimal"')}
+  </div>`;
 acoes.novoInsumo = () => formulario('Novo insumo', camposInsumo(), d => {
   if (!d.nome) return 'Informe o nome do insumo.';
-  db.insumos.push({id:uid(), nome:d.nome, unidade:d.unidade||'un'});
+  const q = parseValor(d.quantidade || 0);
+  if (!(q >= 0)) return 'Quantidade inválida.';
+  db.insumos.push({id:uid(), nome:d.nome, unidade:d.unidade||'un', quantidade:arred(q)});
   return null;
 });
 acoes.editarInsumo = id => {
   const i = achar(db.insumos, id);
   formulario('Editar insumo', camposInsumo(i), d => {
     if (!d.nome) return 'Informe o nome do insumo.';
-    Object.assign(i, {nome:d.nome, unidade:d.unidade||'un'});
+    const q = parseValor(d.quantidade || 0);
+    if (!(q >= 0)) return 'Quantidade inválida.';
+    Object.assign(i, {nome:d.nome, unidade:d.unidade||'un', quantidade:arred(q)});
+    return null;
+  });
+};
+acoes.entradaInsumo = id => {
+  const i = achar(db.insumos, id);
+  formulario(`Entrada: ${esc(i.nome)}`, campo('Quantidade que entrou *','qtd','','text','inputmode="decimal"'), d => {
+    const q = parseValor(d.qtd);
+    if (!(q > 0)) return 'Informe uma quantidade maior que zero.';
+    i.quantidade = arred(i.quantidade + q);
     return null;
   });
 };
@@ -1095,18 +1119,26 @@ acoes.excluirInsumo = id => {
 acoes.novoConsumo = () => {
   if (!db.insumos.length) { alert('Cadastre um insumo primeiro.'); return; }
   formulario('Registrar consumo', `
-    ${select('Insumo','insumoId', db.insumos.map(i => [i.id, i.nome]), db.insumos[0].id)}
+    ${select('Insumo','insumoId', db.insumos.map(i => [i.id, `${i.nome} (${fmtQtd(i.quantidade)} ${i.unidade} em estoque)`]), db.insumos[0].id)}
     <div class="grade">${campo('Quantidade *','qtd','','text','inputmode="decimal"')}${campo('Data','data',hojeISO(),'date')}</div>
     ${campo('Observação','obs','')}`, d => {
-      if (!achar(db.insumos, d.insumoId)) return 'Insumo inválido.';
+      const i = achar(db.insumos, d.insumoId);
+      if (!i) return 'Insumo inválido.';
       const q = parseValor(d.qtd);
       if (!(q > 0)) return 'Informe uma quantidade maior que zero.';
-      db.consumos.push({id:uid(), insumoId:d.insumoId, qtd:q, data:d.data||hojeISO(), obs:d.obs});
+      if (q > i.quantidade) return `Estoque insuficiente. Disponível: ${fmtQtd(i.quantidade)} ${i.unidade}.`;
+      i.quantidade = arred(i.quantidade - q);
+      db.consumos.push({id:uid(), insumoId:i.id, qtd:q, data:d.data||hojeISO(), obs:d.obs});
       return null;
   });
 };
 acoes.excluirConsumo = id => {
-  db.consumos = db.consumos.filter(c => c.id !== id);
+  const c = achar(db.consumos, id);
+  if (c) {
+    const i = achar(db.insumos, c.insumoId);
+    if (i) i.quantidade = arred(i.quantidade + c.qtd);
+  }
+  db.consumos = db.consumos.filter(x => x.id !== id);
   salvar(); render();
 };
 
