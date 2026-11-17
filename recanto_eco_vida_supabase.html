@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recanto Eco Vida · Sistema de Gestão</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f4f7f5;--surface:#ffffff;--surface-2:#fafcfb;
+  --text:#1d2a23;--muted:#6b7a71;--line:#e4ebe6;
+  --primary:#2f7d5b;--primary-dark:#24634a;--primary-soft:#e6f2ec;
+  --danger:#c2453a;--danger-soft:#fbeceb;
+  --warn:#b7791f;--warn-soft:#fdf5e6;
+  --radius:14px;--radius-sm:10px;
+  --shadow:0 1px 2px rgba(16,24,20,.04),0 6px 20px rgba(16,24,20,.05);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased}
+body.deslogado .topo,body.deslogado main{display:none}
+h1,h2,h3{font-weight:600;margin:0;letter-spacing:-.01em}
+h1{font-size:24px}
+h2{font-size:18px;margin-bottom:14px}
+h3{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:20px 0 10px}
+
+/* login */
+.login{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);padding:20px;z-index:30}
+.login.hidden{display:none}
+.login-caixa{background:var(--surface);border-radius:20px;box-shadow:0 20px 60px rgba(16,24,20,.1);padding:36px;width:min(380px,100%)}
+.login-caixa .logo{margin-bottom:18px}
+.login-caixa h1{margin-bottom:4px}
+.login-caixa .sub{margin-bottom:22px}
+.login-caixa button{width:100%;margin-top:6px;padding:11px}
+
+/* cabeçalho */
+.topo{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;padding:14px 28px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.marca{display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#3f9a72,var(--primary-dark));color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.02em}
+.marca-texto b{display:block;font-size:15px;font-weight:600}
+.marca-texto small{color:var(--muted);font-size:12px}
+nav{display:flex;flex-wrap:wrap;gap:4px;background:var(--bg);padding:4px;border-radius:12px}
+nav button{background:transparent;color:var(--muted);box-shadow:none;padding:7px 14px;border-radius:9px;font-weight:500}
+nav button:hover{color:var(--text)}
+nav button.ativo{background:var(--surface);color:var(--primary-dark);box-shadow:var(--shadow);font-weight:600}
+.acoes-topo{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.aviso{color:var(--muted);font-size:12px;margin-right:4px}
+
+/* área principal */
+main{padding:28px;max-width:1120px;margin:0 auto}
+.cabeca{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.sub{color:var(--muted);margin:4px 0 0}
+
+/* botões */
+button{background:var(--primary);color:#fff;border:0;border-radius:var(--radius-sm);padding:9px 16px;font:inherit;font-weight:500;cursor:pointer;transition:background .15s,transform .05s}
+button:hover{background:var(--primary-dark)}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.6;cursor:default}
+button.sec{background:var(--surface);color:var(--text);border:1px solid var(--line);box-shadow:var(--shadow)}
+button.sec:hover{background:var(--surface-2);border-color:#d3ddd6}
+button.perigo{background:var(--surface);color:var(--danger);border:1px solid #f1d5d2}
+button.perigo:hover{background:var(--danger-soft)}
+button.pequeno{padding:5px 10px;font-size:12px;border-radius:8px}
+.link{background:none;color:var(--muted);padding:0 0 0 8px;font-size:12px;text-decoration:underline;font-weight:normal;box-shadow:none}
+.link:hover{background:none;color:var(--danger)}
+
+/* campos */
+input,select,textarea{background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;font:inherit;width:100%;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(47,125,91,.14);background:#fff}
+.campo{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-bottom:14px}
+.campo input,.campo select,.campo textarea{margin-top:6px;font-size:14px;color:var(--text)}
+.campo textarea{min-height:84px;resize:vertical}
+.filtros{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;align-items:center}
+.filtros input[type=text]{flex:1;min-width:220px}
+.filtros select,.filtros input[type=date]{width:auto;min-width:160px}
+.campo-inline{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:13px}
+.campo-inline input{width:auto}
+.grade{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+/* tabelas (cards em lista) */
+.tabela{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.linha{display:grid;gap:14px;align-items:center;padding:14px 20px;border-top:1px solid var(--line);transition:background .12s}
+.linha:first-child{border-top:0}
+.linha:not(.cab):hover{background:var(--surface-2)}
+.linha.cab{background:var(--surface-2);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:11px 20px}
+.cols-crm{grid-template-columns:2fr 1fr 1.3fr 1.6fr auto}
+.cols-fin{grid-template-columns:.9fr 2.2fr 1.3fr 1fr 1.2fr auto}
+.cols-est{grid-template-columns:2fr 1fr .8fr 1.4fr auto}
+.cols-fun{grid-template-columns:1.6fr 1.2fr 1.3fr .9fr .9fr auto}
+.cols-ins{grid-template-columns:2fr 1fr 1.2fr auto}
+.cols-cons{grid-template-columns:.9fr 1.5fr 1fr 2fr auto}
+.cols-mov{grid-template-columns:.9fr 1fr 1fr 2fr}
+.linha select{width:auto;padding:6px 10px;font-size:13px;border-radius:8px}
+.destaque{color:var(--text);font-weight:600;cursor:pointer}
+.destaque:hover{color:var(--primary)}
+.dir{text-align:right}
+.verde{color:var(--primary)}
+.verm{color:var(--danger)}
+.acoes-linha{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.vazio{padding:40px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed #cfdad3;border-radius:var(--radius)}
+
+/* tags */
+.tag{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:#eef1ef;color:var(--muted)}
+.tag.cliente{background:var(--primary-soft);color:var(--primary-dark)}
+.tag.lead{background:#e8eef6;color:#3d5a7a}
+.tag.receita,.tag.verde,.tag.ativo{background:var(--primary-soft);color:var(--primary-dark)}
+.tag.despesa,.tag.verm,.tag.inativo{background:var(--danger-soft);color:var(--danger)}
+.tag.ouro{background:var(--warn-soft);color:var(--warn)}
+
+/* resumo e alertas */
+.resumo{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.card span{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-bottom:6px}
+.card b{font-size:24px;font-weight:600;letter-spacing:-.02em}
+.card.destaque-card{background:linear-gradient(135deg,var(--primary),var(--primary-dark));border-color:transparent}
+.card.destaque-card span{color:rgba(255,255,255,.8)}
+.card.destaque-card b{color:#fff}
+.card.destaque-card b.verm{color:#ffd7d2}
+.alerta{background:var(--warn-soft);border:1px solid #f0dcb0;color:#8a5a12;padding:12px 16px;border-radius:var(--radius-sm);margin-bottom:16px;font-weight:500}
+.secao{margin-top:30px}
+.compacta .linha{padding:10px 14px}
+
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(20,30,25,.35);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal.hidden{display:none}
+.caixa{background:var(--surface);border-radius:18px;padding:28px;width:min(580px,100%);max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(16,24,20,.18)}
+.botoes{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.botoes .perigo{margin-right:auto}
+.erro{color:var(--danger);min-height:18px;margin:10px 0 0;font-weight:500}
+.bloco{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px;margin:14px 0;color:var(--text)}
+.hist{list-style:none;padding:0;margin:0}
+.hist li{border-left:3px solid var(--primary-soft);padding:8px 0 12px 14px;margin-bottom:6px}
+.hist li:hover{border-left-color:var(--primary)}
+.hist p{margin:4px 0 0;white-space:pre-wrap;color:var(--text)}
+.ficha-cab{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ficha-cab h2{margin:0}
+
+@media(max-width:760px){
+  .topo{padding:12px 16px}
+  main{padding:18px 16px}
+  .cols-crm,.cols-fin,.cols-est,.cols-fun,.cols-ins,.cols-cons,.cols-mov{grid-template-columns:1fr}
+  .linha.cab{display:none}
+  .resumo{grid-template-columns:1fr}
+  .grade{grid-template-columns:1fr}
+  .acoes-linha{justify-content:flex-start}
+}
+</style>
+</head>
+<body class="deslogado">
+
+<div id="login" class="login hidden">
+  <form id="formLogin" class="login-caixa">
+    <div class="logo">RE</div>
+    <h1>Recanto Eco Vida</h1>
+    <p class="sub">Entre com seu e-mail e senha para acessar o sistema.</p>
+    <label class="campo">E-mail<input name="email" type="email" required autocomplete="username"></label>
+    <label class="campo">Senha<input name="senha" type="password" required autocomplete="current-password"></label>
+    <p class="erro" id="erroLogin"></p>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+
+<header class="topo">
+  <div class="marca">
+    <div class="logo">RE</div>
+    <div class="marca-texto"><b>Recanto Eco Vida</b><small>Sistema de gestão</small></div>
+  </div>
+  <nav id="nav"></nav>
+  <div class="acoes-topo">
+    <span class="aviso" id="status">Conectado</span>
+    <button class="sec pequeno" id="btnBackup">Backup</button>
+    <button class="sec pequeno" id="btnRestaurar">Restaurar</button>
+    <button class="sec pequeno" id="btnSair">Sair</button>
+    <input type="file" id="arquivo" accept="application/json" hidden>
+  </div>
+</header>
+<main id="app"></main>
+<div id="modal" class="modal hidden"><div class="caixa" id="modalConteudo"></div></div>
+
+<script>
+const SUPABASE_URL = 'https://sjujrjazopshepuszvmo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_MubkWo1ohOq7lhTJi07B5g_6Hkc8IX3';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let USER_ID = null;
+
+const MAX_ETAPAS = 6;
+const MAX_CATEGORIAS = 15;
+const ABAS = [['crm','CRM'],['fin','Financeiro'],['est','Estoque'],['fun','Funcionários'],['ins','Insumos']];
+const TABELAS = ['crm_contatos','crm_historico','configuracoes','financeiro_lancamentos','estoque_produtos','estoque_movimentos','funcionarios','insumos','insumos_consumos'];
+
+/* ---------- utilidades ---------- */
+const acoes = {};
+const uid = () => crypto.randomUUID
+  ? crypto.randomUUID()
+  : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function hojeISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function primeiroDiaMes(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;}
+const dataBR = s => s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+const moeda = v => Number(v || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const fmtQtd = v => Number(v || 0).toLocaleString('pt-BR', {maximumFractionDigits:3});
+function parseValor(s){
+  let v = String(s).trim();
+  if (v.includes(',')) v = v.replace(/\./g,'').replace(',','.');
+  return Number(v);
+}
+const achar = (lista, id) => lista.find(x => x.id === id);
+const porNome = (a,b) => a.nome.localeCompare(b.nome, 'pt-BR');
+const opts = (lista, valor) => lista.map(([v,t]) => `<option value="${esc(v)}" ${String(v)===String(valor)?'selected':''}>${esc(t)}</option>`).join('');
+const campo = (rotulo, nome, valor='', tipo='text', extra='') => `<label class="campo">${rotulo}<input name="${nome}" type="${tipo}" value="${esc(valor)}" ${extra}></label>`;
+const select = (rotulo, nome, lista, valor) => `<label class="campo">${rotulo}<select name="${nome}">${opts(lista, valor)}</select></label>`;
+const area = (rotulo, nome, valor='', extra='') => `<label class="campo">${rotulo}<textarea name="${nome}" ${extra}>${esc(valor)}</textarea></label>`;
+const vazio = msg => `<div class="vazio">${msg}</div>`;
+function baixar(nome, conteudo, tipo){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([conteudo], {type: tipo}));
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+function setStatus(t){ document.getElementById('status').textContent = t; }
+
+/* ---------- estado ---------- */
+const ui = {busca:'', tipo:'todos', etapa:'todas', ini:primeiroDiaMes(), fim:hojeISO(), tipoLanc:'todos', statusFun:'todos'};
+let aba = 'crm';
+
+function padrao(){
+  return {
+    clientes: [],
+    etapas: ['Novo contato','Primeiro retorno','Proposta enviada','Negociação','Fechado','Pós-venda'],
+    categorias: ['Vendas','Serviços','Aluguel','Salários','Fornecedores','Impostos','Outros'],
+    lancamentos: [],
+    produtos: [],
+    movimentos: [],
+    funcionarios: [],
+    insumos: [],
+    consumos: []
+  };
+}
+let db = padrao();
+
+function registrarMov(p, tipo, qtd, data, obs){
+  const novo = tipo === 'entrada' ? p.quantidade + qtd : p.quantidade - qtd;
+  p.quantidade = Math.round(novo * 1000) / 1000;
+  db.movimentos.push({id:uid(), produtoId:p.id, tipo, qtd, data, obs:obs||''});
+}
+function lancamentosDoPeriodo(){
+  return db.lancamentos.filter(l => (!ui.ini || l.data >= ui.ini) && (!ui.fim || l.data <= ui.fim));
+}
+
+/* ---------- sincronização com o Supabase ----------
+   O app trabalha com um estado em memória (db). A cada alteração, salvar()
+   compara esse estado com o último sincronizado e envia só o que mudou. */
+const chaveDe = (t, r) => t === 'configuracoes' ? r.chave : r.id;
+
+function paraLinhas(){
+  const L = {};
+  L.crm_contatos = db.clientes.map(c => ({id:c.id, user_id:USER_ID, tipo:c.tipo, nome:c.nome, telefone:c.telefone||null, email:c.email||null, observacoes:c.observacoes||null, etapa:c.etapa, criado_em:c.criadoEm||hojeISO()}));
+  L.crm_historico = db.clientes.flatMap(c => c.historico.map(h => ({id:h.id, user_id:USER_ID, contato_id:c.id, data:h.data, canal:h.canal||null, texto:h.texto})));
+  L.configuracoes = [
+    {user_id:USER_ID, chave:'etapas', valor:db.etapas},
+    {user_id:USER_ID, chave:'categorias', valor:db.categorias}
+  ];
+  L.financeiro_lancamentos = db.lancamentos.map(l => ({id:l.id, user_id:USER_ID, tipo:l.tipo, data:l.data, descricao:l.descricao, valor:l.valor, categoria:l.categoria||null}));
+  L.estoque_produtos = db.produtos.map(p => ({id:p.id, user_id:USER_ID, nome:p.nome, unidade:p.unidade||'un', quantidade:p.quantidade, minimo:p.minimo}));
+  L.estoque_movimentos = db.movimentos.map(m => ({id:m.id, user_id:USER_ID, produto_id:m.produtoId, tipo:m.tipo, qtd:m.qtd, data:m.data, obs:m.obs||null}));
+  L.funcionarios = db.funcionarios.map(f => ({id:f.id, user_id:USER_ID, nome:f.nome, funcao:f.funcao||null, contato:f.contato||null, admissao:f.admissao||null, status:f.status}));
+  L.insumos = db.insumos.map(i => ({id:i.id, user_id:USER_ID, nome:i.nome, unidade:i.unidade||'un'}));
+  L.insumos_consumos = db.consumos.map(c => ({id:c.id, user_id:USER_ID, insumo_id:c.insumoId, qtd:c.qtd, data:c.data, obs:c.obs||null}));
+  return L;
+}
+
+let snapshot = {};
+let fila = Promise.resolve();
+
+function salvar(){
+  setStatus('Salvando…');
+  fila = fila
+    .then(sincronizar)
+    .then(() => setStatus('Salvo'))
+    .catch(err => {
+      console.error(err);
+      setStatus('Erro ao salvar');
+      alert('Não foi possível salvar: ' + (err.message || err));
+    });
+}
+
+async function sincronizar(){
+  const L = paraLinhas();
+  const planos = {};
+  for (const t of TABELAS){
+    const atual = new Map(L[t].map(r => [chaveDe(t, r), r]));
+    const antes = snapshot[t] || new Map();
+    const envia = [];
+    for (const [k, r] of atual) if (antes.get(k) !== JSON.stringify(r)) envia.push(r);
+    const remover = [...antes.keys()].filter(k => !atual.has(k));
+    planos[t] = {atual, envia, remover};
+  }
+  for (const t of TABELAS){
+    const {envia} = planos[t];
+    if (envia.length){
+      const {error} = await sb.from(t).upsert(envia, {onConflict: t === 'configuracoes' ? 'user_id,chave' : 'id'});
+      if (error) throw error;
+    }
+  }
+  for (const t of [...TABELAS].reverse()){
+    const {remover} = planos[t];
+    if (remover.length){
+      const {error} = await sb.from(t).delete().in(t === 'configuracoes' ? 'chave' : 'id', remover);
+      if (error) throw error;
+    }
+  }
+  for (const t of TABELAS)
+    snapshot[t] = new Map([...planos[t].atual].map(([k, r]) => [k, JSON.stringify(r)]));
+}
+
+async function carregarDados(){
+  const res = await Promise.all(TABELAS.map(t => sb.from(t).select('*')));
+  res.forEach(r => { if (r.error) throw r.error; });
+  const [contatos, hist, cfg, lanc, prod, movs, func, ins, cons] = res.map(r => r.data);
+  const conf = Object.fromEntries(cfg.map(c => [c.chave, c.valor]));
+  const base = padrao();
+  db = {
+    clientes: contatos.map(c => ({
+      id:c.id, tipo:c.tipo, nome:c.nome, telefone:c.telefone||'', email:c.email||'',
+      observacoes:c.observacoes||'', etapa:c.etapa, criadoEm:c.criado_em,
+      historico: hist.filter(h => h.contato_id === c.id)
+        .map(h => ({id:h.id, data:h.data, canal:h.canal||'', texto:h.texto}))
+    })),
+    etapas: conf.etapas || base.etapas,
+    categorias: conf.categorias || base.categorias,
+    lancamentos: lanc.map(l => ({id:l.id, tipo:l.tipo, data:l.data, descricao:l.descricao, valor:Number(l.valor), categoria:l.categoria||''})),
+    produtos: prod.map(p => ({id:p.id, nome:p.nome, unidade:p.unidade, quantidade:Number(p.quantidade), minimo:Number(p.minimo)})),
+    movimentos: movs.map(m => ({id:m.id, produtoId:m.produto_id, tipo:m.tipo, qtd:Number(m.qtd), data:m.data, obs:m.obs||''})),
+    funcionarios: func.map(f => ({id:f.id, nome:f.nome, funcao:f.funcao||'', contato:f.contato||'', admissao:f.admissao||'', status:f.status})),
+    insumos: ins.map(i => ({id:i.id, nome:i.nome, unidade:i.unidade})),
+    consumos: cons.map(c => ({id:c.id, insumoId:c.insumo_id, qtd:Number(c.qtd), data:c.data, obs:c.obs||''}))
+  };
+  // snapshot = estado exatamente como veio do banco
+  const L = paraLinhas();
+  snapshot = {};
+  for (const t of TABELAS) snapshot[t] = new Map(L[t].map(r => [chaveDe(t, r), JSON.stringify(r)]));
+  // configurações: só consideram "já salvo" o que existe no banco
+  snapshot.configuracoes = new Map(cfg.map(c => [c.chave, JSON.stringify({user_id:USER_ID, chave:c.chave, valor:c.valor})]));
+}
+
+/* ---------- login ---------- */
+async function entrar(session){
+  USER_ID = session.user.id;
+  await carregarDados();
+  document.getElementById('login').classList.add('hidden');
+  document.body.classList.remove('deslogado');
+  aba = 'crm';
+  render();
+  salvar();
+}
+document.getElementById('formLogin').onsubmit = async e => {
+  e.preventDefault();
+  const erro = document.getElementById('erroLogin');
+  const botao = e.target.querySelector('button');
+  erro.textContent = '';
+  botao.disabled = true;
+  const {data, error} = await sb.auth.signInWithPassword({
+    email: e.target.email.value.trim(),
+    password: e.target.senha.value
+  });
+  if (error) { botao.disabled = false; erro.textContent = 'E-mail ou senha inválidos.'; return; }
+  try { await entrar(data.session); }
+  catch (err) { erro.textContent = 'Não foi possível carregar os dados.'; console.error(err); }
+  botao.disabled = false;
+};
+document.getElementById('btnSair').onclick = async () => {
+  await sb.auth.signOut();
+  location.reload();
+};
+
+/* ---------- modal e formulários ---------- */
+const modal = document.getElementById('modal');
+const modalBox = document.getElementById('modalConteudo');
+function abrirModal(html){ modalBox.innerHTML = html; modal.classList.remove('hidden'); }
+function fecharModal(){ modal.classList.add('hidden'); modalBox.innerHTML = ''; }
+function formulario(titulo, campos, onSalvar, rotuloBotao='Salvar'){
+  abrirModal(`<h2>${titulo}</h2><form id="frm" autocomplete="off">${campos}<p class="erro" id="erroFrm"></p><div class="botoes"><button type="button" class="sec" data-fechar>Cancelar</button><button type="submit">${rotuloBotao}</button></div></form>`);
+  document.getElementById('frm').onsubmit = e => {
+    e.preventDefault();
+    const d = {};
+    new FormData(e.target).forEach((v,k) => d[k] = String(v).trim());
+    const erro = onSalvar(d);
+    if (erro) { document.getElementById('erroFrm').textContent = erro; return; }
+    salvar(); fecharModal(); render();
+  };
+}
+
+/* ---------- eventos globais ---------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t === modal) { fecharModal(); return; }
+  if (t.closest('[data-fechar]')) { fecharModal(); return; }
+  const nav = t.closest('[data-aba]');
+  if (nav) { aba = nav.dataset.aba; ui.busca = ''; render(); return; }
+  const el = t.closest('[data-acao]');
+  if (el && acoes[el.dataset.acao]) acoes[el.dataset.acao](el.dataset.id, el);
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.filtro) { ui[t.dataset.filtro] = t.value; renderLista(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.filtro) { ui[t.dataset.filtro] = t.value; renderLista(); }
+  else if (t.dataset.mudar && acoes[t.dataset.mudar]) acoes[t.dataset.mudar](t.dataset.id, t);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
+
+/* ---------- renderização ---------- */
+const app = document.getElementById('app');
+function render(){
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('ativo', b.dataset.aba === aba));
+  const telas = {crm:telaCRM, fin:telaFin, est:telaEst, fun:telaFun, ins:telaIns};
+  app.innerHTML = telas[aba]();
+  renderLista();
+}
+function renderLista(){
+  const el = document.getElementById('lista');
+  if (!el) return;
+  const listas = {crm:listaCRM, fin:listaFin, est:listaEst, fun:listaFun, ins:listaIns};
+  el.innerHTML = listas[aba]();
+}
+document.getElementById('nav').innerHTML = ABAS.map(([k,t]) => `<button data-aba="${k}">${t}</button>`).join('');
+
+/* ================= CRM ================= */
+function telaCRM(){
+  const etapas = [['todas','Todas as etapas'], ...db.etapas.map((e,i) => [String(i), e])];
+  return `
+  <section class="cabeca">
+    <div><h1>CRM</h1><p class="sub">${db.clientes.filter(c=>c.tipo==='lead').length} leads · ${db.clientes.filter(c=>c.tipo==='cliente').length} clientes</p></div>
+    <div class="acoes-topo"><button class="sec" data-acao="editarEtapas">Etapas</button><button data-acao="novoContato">+ Novo cadastro</button></div>
+  </section>
+  <section class="filtros">
+    <input type="text" placeholder="Buscar por nome, telefone ou e-mail" value="${esc(ui.busca)}" data-filtro="busca">
+    <select data-filtro="tipo">${opts([['todos','Todos'],['cliente','Clientes'],['lead','Leads']], ui.tipo)}</select>
+    <select data-filtro="etapa">${opts(etapas, ui.etapa)}</select>
+  </section>
+  <div id="lista"></div>`;
+}
+function listaCRM(){
+  const termo = ui.busca.toLowerCase();
+  const lista = db.clientes.filter(c => {
+    if (ui.tipo !== 'todos' && c.tipo !== ui.tipo) return false;
+    if (ui.etapa !== 'todas' && String(c.etapa) !== ui.etapa) return false;
+    if (termo && ![c.nome,c.telefone,c.email].some(v => (v||'').toLowerCase().includes(termo))) return false;
+    return true;
+  }).sort(porNome);
+  if (!lista.length) return vazio('Nenhum contato encontrado.');
+  return `<div class="tabela">
+    <div class="linha cab cols-crm"><span>Nome</span><span>Tipo</span><span>Telefone</span><span>Etapa</span><span></span></div>
+    ${lista.map(c => `
+      <div class="linha cols-crm">
+        <span class="destaque" data-acao="ver" data-id="${c.id}">${esc(c.nome)}</span>
+        <span><b class="tag ${c.tipo}">${c.tipo==='cliente'?'Cliente':'Lead'}</b></span>
+        <span>${esc(c.telefone) || '—'}</span>
+        <span><select data-mudar="mudarEtapa" data-id="${c.id}"><option value="-1">Sem etapa</option>${db.etapas.map((e,i) => `<option value="${i}" ${c.etapa===i?'selected':''}>${esc(e)}</option>`).join('')}</select></span>
+        <span class="acoes-linha"><button class="sec pequeno" data-acao="ver" data-id="${c.id}">Abrir</button></span>
+      </div>`).join('')}
+  </div>`;
+}
+const camposContato = (c={}) => `
+  ${campo('Nome *','nome',c.nome||'')}
+  <div class="grade">${select('Tipo','tipo',[['lead','Lead'],['cliente','Cliente']],c.tipo||'lead')}${campo('Telefone / WhatsApp','telefone',c.telefone||'')}</div>
+  ${campo('E-mail','email',c.email||'','email')}
+  ${area('Observações','observacoes',c.observacoes||'')}`;
+
+acoes.novoContato = () => formulario('Novo cadastro', camposContato(), d => {
+  if (!d.nome) return 'Informe o nome.';
+  db.clientes.push({id:uid(), nome:d.nome, tipo:d.tipo, telefone:d.telefone, email:d.email, observacoes:d.observacoes, etapa: db.etapas.length ? 0 : -1, historico:[], criadoEm:hojeISO()});
+  return null;
+});
+acoes.editarContato = id => {
+  const c = achar(db.clientes, id);
+  formulario('Editar cadastro', camposContato(c), d => {
+    if (!d.nome) return 'Informe o nome.';
+    Object.assign(c, {nome:d.nome, tipo:d.tipo, telefone:d.telefone, email:d.email, observacoes:d.observacoes});
+    return null;
+  });
+};
+acoes.excluirContato = id => {
+  if (!confirm('Excluir este cadastro e todo o histórico?')) return;
+  db.clientes = db.clientes.filter(c => c.id !== id);
+  salvar(); fecharModal(); render();
+};
+acoes.ver = id => {
+  const c = achar(db.clientes, id);
+  if (!c) return;
+  const hist = [...c.historico].sort((a,b) => b.data.localeCompare(a.data));
+  const etapaNome = (c.etapa >= 0 && db.etapas[c.etapa]) ? esc(db.etapas[c.etapa]) : 'Sem etapa';
+  abrirModal(`
+    <div class="ficha-cab"><h2>${esc(c.nome)}</h2><span class="tag ${c.tipo}">${c.tipo==='cliente'?'Cliente':'Lead'}</span></div>
+    <p class="sub">${esc(c.telefone) || 'Sem telefone'} · ${esc(c.email) || 'Sem e-mail'}</p>
+    <p class="sub">Etapa: <b>${etapaNome}</b></p>
+    ${c.observacoes ? `<div class="bloco">${esc(c.observacoes).replace(/\n/g,'<br>')}</div>` : ''}
+    <h3>Histórico de contatos</h3>
+    ${hist.length ? `<ul class="hist">${hist.map(h => `
+      <li>
+        <div><b>${dataBR(h.data)}</b> · ${esc(h.canal)} <button class="link" data-acao="removerHist" data-id="${c.id}:${h.id}">remover</button></div>
+        <p>${esc(h.texto)}</p>
+      </li>`).join('')}</ul>` : '<p class="sub">Nenhum contato registrado.</p>'}
+    <div class="botoes">
+      <button class="perigo" data-acao="excluirContato" data-id="${c.id}">Excluir</button>
+      <button class="sec" data-acao="editarContato" data-id="${c.id}">Editar</button>
+      <button class="sec" data-fechar>Fechar</button>
+      <button data-acao="registrarContato" data-id="${c.id}">+ Registrar contato</button>
+    </div>`);
+};
+acoes.registrarContato = id => formulario('Registrar contato', `
+  <div class="grade">${campo('Data','data',hojeISO(),'date')}${select('Canal','canal',[['WhatsApp','WhatsApp'],['Ligação','Ligação'],['E-mail','E-mail'],['Reunião','Reunião'],['Instagram','Instagram'],['Outro','Outro']],'WhatsApp')}</div>
+  ${area('Descrição do contato *','texto','')}`, d => {
+    if (!d.texto) return 'Descreva o contato.';
+    achar(db.clientes, id).historico.push({id:uid(), data:d.data||hojeISO(), canal:d.canal, texto:d.texto});
+    return null;
+});
+acoes.removerHist = ids => {
+  const [cid, hid] = ids.split(':');
+  const c = achar(db.clientes, cid);
+  if (!c || !confirm('Remover este registro do histórico?')) return;
+  c.historico = c.historico.filter(h => h.id !== hid);
+  salvar(); render(); acoes.ver(cid);
+};
+acoes.mudarEtapa = (id, el) => {
+  achar(db.clientes, id).etapa = Number(el.value);
+  salvar();
+};
+acoes.editarEtapas = () => formulario('Etapas de acompanhamento',
+  `<p class="sub">Até ${MAX_ETAPAS} etapas, uma por linha, na ordem do funil.</p>${area('Etapas','etapas',db.etapas.join('\n'),'rows="8"')}`,
+  d => {
+    const lista = d.etapas.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lista.length) return 'Informe pelo menos uma etapa.';
+    if (lista.length > MAX_ETAPAS) return `O máximo é ${MAX_ETAPAS} etapas.`;
+    db.etapas = lista;
+    return null;
+});
+
+/* ================= FINANCEIRO ================= */
+function telaFin(){
+  return `
+  <section class="cabeca">
+    <div><h1>Financeiro</h1><p class="sub">Receitas e despesas lançadas manualmente</p></div>
+    <div class="acoes-topo">
+      <button class="sec" data-acao="categorias">Categorias</button>
+      <button class="sec" data-acao="exportarCSV">Exportar CSV</button>
+      <button data-acao="novoLanc">+ Lançamento</button>
+    </div>
+  </section>
+  <section class="filtros">
+    <label class="campo-inline">De <input type="date" value="${ui.ini}" data-filtro="ini"></label>
+    <label class="campo-inline">Até <input type="date" value="${ui.fim}" data-filtro="fim"></label>
+    <select data-filtro="tipoLanc">${opts([['todos','Receitas e despesas'],['receita','Só receitas'],['despesa','Só despesas']], ui.tipoLanc)}</select>
+  </section>
+  <div id="lista"></div>`;
+}
+function listaFin(){
+  const periodo = lancamentosDoPeriodo();
+  const rec = periodo.filter(l => l.tipo === 'receita').reduce((s,l) => s + l.valor, 0);
+  const desp = periodo.filter(l => l.tipo === 'despesa').reduce((s,l) => s + l.valor, 0);
+  const saldo = rec - desp;
+  const visiveis = periodo
+    .filter(l => ui.tipoLanc === 'todos' || l.tipo === ui.tipoLanc)
+    .sort((a,b) => b.data.localeCompare(a.data));
+  return `
+  <section class="resumo">
+    <div class="card"><span>Receitas</span><b class="verde">${moeda(rec)}</b></div>
+    <div class="card"><span>Despesas</span><b class="verm">${moeda(desp)}</b></div>
+    <div class="card destaque-card"><span>Saldo do período</span><b class="${saldo>=0?'verde':'verm'}">${moeda(saldo)}</b></div>
+  </section>
+  ${visiveis.length ? `<div class="tabela">
+    <div class="linha cab cols-fin"><span>Data</span><span>Descrição</span><span>Categoria</span><span>Tipo</span><span class="dir">Valor</span><span></span></div>
+    ${visiveis.map(l => `
+      <div class="linha cols-fin">
+        <span>${dataBR(l.data)}</span>
+        <span>${esc(l.descricao)}</span>
+        <span>${esc(l.categoria)}</span>
+        <span><b class="tag ${l.tipo}">${l.tipo==='receita'?'Receita':'Despesa'}</b></span>
+        <span class="dir ${l.tipo==='receita'?'verde':'verm'}">${l.tipo==='despesa'?'-':''}${moeda(l.valor)}</span>
+        <span class="acoes-linha">
+          <button class="sec pequeno" data-acao="editarLanc" data-id="${l.id}">Editar</button>
+          <button class="sec pequeno" data-acao="excluirLanc" data-id="${l.id}">Excluir</button>
+        </span>
+      </div>`).join('')}
+  </div>` : vazio('Nenhum lançamento neste período.')}`;
+}
+const camposLanc = (l={}) => `
+  <div class="grade">${select('Tipo','tipo',[['receita','Receita'],['despesa','Despesa']],l.tipo||'despesa')}${campo('Data','data',l.data||hojeISO(),'date')}</div>
+  ${campo('Descrição *','descricao',l.descricao||'')}
+  <div class="grade">
+    ${campo('Valor (R$) *','valor', l.valor!=null ? String(l.valor).replace('.',',') : '', 'text', 'inputmode="decimal"')}
+    ${select('Categoria','categoria', db.categorias.map(c => [c,c]), l.categoria || db.categorias[0])}
+  </div>`;
+function validarLanc(d){
+  if (!d.descricao) return 'Informe a descrição.';
+  if (!(parseValor(d.valor) > 0)) return 'Informe um valor maior que zero.';
+  if (!d.data) return 'Informe a data.';
+  if (!db.categorias.includes(d.categoria)) return 'Cadastre uma categoria antes de lançar.';
+  return null;
+}
+acoes.novoLanc = () => {
+  if (!db.categorias.length) { alert('Cadastre categorias primeiro.'); return acoes.categorias(); }
+  formulario('Novo lançamento', camposLanc(), d => {
+    const e = validarLanc(d); if (e) return e;
+    db.lancamentos.push({id:uid(), tipo:d.tipo, data:d.data, descricao:d.descricao, valor:parseValor(d.valor), categoria:d.categoria});
+    return null;
+  });
+};
+acoes.editarLanc = id => {
+  const l = achar(db.lancamentos, id);
+  formulario('Editar lançamento', camposLanc(l), d => {
+    const e = validarLanc(d); if (e) return e;
+    Object.assign(l, {tipo:d.tipo, data:d.data, descricao:d.descricao, valor:parseValor(d.valor), categoria:d.categoria});
+    return null;
+  });
+};
+acoes.excluirLanc = id => {
+  if (!confirm('Excluir este lançamento?')) return;
+  db.lancamentos = db.lancamentos.filter(l => l.id !== id);
+  salvar(); render();
+};
+acoes.categorias = () => formulario('Categorias',
+  `<p class="sub">Até ${MAX_CATEGORIAS} categorias, uma por linha.</p>${area('Categorias','categorias',db.categorias.join('\n'),'rows="10"')}`,
+  d => {
+    const lista = [...new Set(d.categorias.split('\n').map(s => s.trim()).filter(Boolean))];
+    if (!lista.length) return 'Informe ao menos uma categoria.';
+    if (lista.length > MAX_CATEGORIAS) return `O máximo é ${MAX_CATEGORIAS} categorias.`;
+    db.categorias = lista;
+    return null;
+});
+acoes.exportarCSV = () => {
+  const periodo = lancamentosDoPeriodo().sort((a,b) => a.data.localeCompare(b.data));
+  const cel = s => `"${String(s).replace(/"/g,'""')}"`;
+  const linhas = [
+    ['Data','Tipo','Descrição','Categoria','Valor'].join(';'),
+    ...periodo.map(l => [dataBR(l.data), l.tipo==='receita'?'Receita':'Despesa', cel(l.descricao), cel(l.categoria), l.valor.toFixed(2).replace('.',',')].join(';'))
+  ];
+  baixar(`financeiro_${ui.ini}_a_${ui.fim}.csv`, '﻿' + linhas.join('\r\n'), 'text/csv;charset=utf-8');
+};
+
+/* ================= ESTOQUE ================= */
+function telaEst(){
+  return `
+  <section class="cabeca">
+    <div><h1>Estoque</h1><p class="sub">Produtos, entradas e saídas</p></div>
+    <div class="acoes-topo"><button class="sec" data-acao="movimentar">Movimentar</button><button data-acao="novoProduto">+ Produto</button></div>
+  </section>
+  <section class="filtros"><input type="text" placeholder="Buscar produto" value="${esc(ui.busca)}" data-filtro="busca"></section>
+  <div id="lista"></div>`;
+}
+function listaEst(){
+  const termo = ui.busca.toLowerCase();
+  const abaixo = db.produtos.filter(p => p.quantidade <= p.minimo).length;
+  const lista = db.produtos.filter(p => !termo || p.nome.toLowerCase().includes(termo)).sort(porNome);
+  return `
+  ${abaixo ? `<div class="alerta">⚠ ${abaixo} produto(s) no estoque mínimo ou abaixo.</div>` : ''}
+  ${lista.length ? `<div class="tabela">
+    <div class="linha cab cols-est"><span>Produto</span><span class="dir">Quantidade</span><span class="dir">Mínimo</span><span>Situação</span><span></span></div>
+    ${lista.map(p => {
+      const st = p.quantidade <= 0 ? ['Zerado','verm'] : p.quantidade <= p.minimo ? ['Abaixo do mínimo','ouro'] : ['OK','verde'];
+      return `<div class="linha cols-est">
+        <span class="destaque" data-acao="histProduto" data-id="${p.id}">${esc(p.nome)}</span>
+        <span class="dir">${fmtQtd(p.quantidade)} ${esc(p.unidade)}</span>
+        <span class="dir">${fmtQtd(p.minimo)}</span>
+        <span><b class="tag ${st[1]}">${st[0]}</b></span>
+        <span class="acoes-linha">
+          <button class="sec pequeno" data-acao="movProduto" data-id="${p.id}" data-tipo="entrada">Entrada</button>
+          <button class="sec pequeno" data-acao="movProduto" data-id="${p.id}" data-tipo="saida">Saída</button>
+          <button class="sec pequeno" data-acao="editarProduto" data-id="${p.id}">Editar</button>
+        </span>
+      </div>`;
+    }).join('')}
+  </div>` : vazio('Nenhum produto cadastrado.')}`;
+}
+const camposProduto = (p={}, novo=false) => `
+  ${campo('Nome do produto *','nome',p.nome||'')}
+  <div class="grade">
+    ${campo('Unidade','unidade',p.unidade||'un')}
+    ${campo('Estoque mínimo (alerta)','minimo', p.minimo!=null ? String(p.minimo).replace('.',',') : '0', 'text', 'inputmode="decimal"')}
+  </div>
+  ${novo ? campo('Quantidade inicial','qtd','0','text','inputmode="decimal"') : ''}`;
+acoes.novoProduto = () => formulario('Novo produto', camposProduto({}, true), d => {
+  if (!d.nome) return 'Informe o nome do produto.';
+  const minimo = parseValor(d.minimo || 0);
+  const qtd = parseValor(d.qtd || 0);
+  if (!(minimo >= 0)) return 'Estoque mínimo inválido.';
+  if (!(qtd >= 0)) return 'Quantidade inicial inválida.';
+  const p = {id:uid(), nome:d.nome, unidade:d.unidade||'un', quantidade:0, minimo};
+  db.produtos.push(p);
+  if (qtd > 0) registrarMov(p, 'entrada', qtd, hojeISO(), 'Estoque inicial');
+  return null;
+});
+acoes.editarProduto = id => {
+  const p = achar(db.produtos, id);
+  formulario('Editar produto', camposProduto(p), d => {
+    if (!d.nome) return 'Informe o nome do produto.';
+    const minimo = parseValor(d.minimo || 0);
+    if (!(minimo >= 0)) return 'Estoque mínimo inválido.';
+    Object.assign(p, {nome:d.nome, unidade:d.unidade||'un', minimo});
+    return null;
+  });
+};
+function formMov(produtoId, tipo){
+  if (!db.produtos.length) { alert('Cadastre um produto primeiro.'); return; }
+  formulario('Movimentação de estoque', `
+    <div class="grade">
+      ${select('Tipo','tipo',[['entrada','Entrada'],['saida','Saída']], tipo)}
+      ${select('Produto','produtoId', db.produtos.map(p => [p.id, p.nome]), produtoId || db.produtos[0].id)}
+    </div>
+    <div class="grade">${campo('Quantidade *','qtd','','text','inputmode="decimal"')}${campo('Data','data',hojeISO(),'date')}</div>
+    ${campo('Observação','obs','')}`, d => {
+      const p = achar(db.produtos, d.produtoId);
+      const qtd = parseValor(d.qtd);
+      if (!p) return 'Produto inválido.';
+      if (!(qtd > 0)) return 'Informe uma quantidade maior que zero.';
+      if (d.tipo === 'saida' && qtd > p.quantidade) return `Estoque insuficiente. Disponível: ${fmtQtd(p.quantidade)} ${p.unidade}.`;
+      registrarMov(p, d.tipo, qtd, d.data || hojeISO(), d.obs);
+      return null;
+  });
+}
+acoes.movimentar = () => formMov(null, 'entrada');
+acoes.movProduto = (id, el) => formMov(id, el.dataset.tipo || 'entrada');
+acoes.histProduto = id => {
+  const p = achar(db.produtos, id);
+  if (!p) return;
+  const movs = db.movimentos.filter(m => m.produtoId === id).sort((a,b) => b.data.localeCompare(a.data));
+  abrirModal(`
+    <h2>${esc(p.nome)}</h2>
+    <p class="sub">Quantidade atual: <b>${fmtQtd(p.quantidade)} ${esc(p.unidade)}</b> · Mínimo: ${fmtQtd(p.minimo)}</p>
+    <h3>Movimentações</h3>
+    ${movs.length ? `<div class="tabela compacta">${movs.map(m => `
+      <div class="linha cols-mov">
+        <span>${dataBR(m.data)}</span>
+        <span><b class="tag ${m.tipo==='entrada'?'verde':'verm'}">${m.tipo==='entrada'?'Entrada':'Saída'}</b></span>
+        <span class="dir">${fmtQtd(m.qtd)} ${esc(p.unidade)}</span>
+        <span>${esc(m.obs)}</span>
+      </div>`).join('')}</div>` : '<p class="sub">Sem movimentações.</p>'}
+    <div class="botoes">
+      <button class="perigo" data-acao="excluirProduto" data-id="${id}">Excluir produto</button>
+      <button class="sec" data-fechar>Fechar</button>
+    </div>`);
+};
+acoes.excluirProduto = id => {
+  if (!confirm('Excluir o produto e todo o histórico de movimentações?')) return;
+  db.produtos = db.produtos.filter(p => p.id !== id);
+  db.movimentos = db.movimentos.filter(m => m.produtoId !== id);
+  salvar(); fecharModal(); render();
+};
+
+/* ================= FUNCIONÁRIOS ================= */
+function telaFun(){
+  return `
+  <section class="cabeca">
+    <div><h1>Funcionários</h1><p class="sub">Equipe, função e situação</p></div>
+    <div class="acoes-topo"><button data-acao="novoFun">+ Funcionário</button></div>
+  </section>
+  <section class="filtros">
+    <input type="text" placeholder="Buscar por nome, função ou contato" value="${esc(ui.busca)}" data-filtro="busca">
+    <select data-filtro="statusFun">${opts([['todos','Todos'],['ativo','Ativos'],['inativo','Inativos']], ui.statusFun)}</select>
+  </section>
+  <div id="lista"></div>`;
+}
+function listaFun(){
+  const termo = ui.busca.toLowerCase();
+  const lista = db.funcionarios
+    .filter(f => (ui.statusFun === 'todos' || f.status === ui.statusFun) &&
+                 (!termo || [f.nome,f.funcao,f.contato].some(v => (v||'').toLowerCase().includes(termo))))
+    .sort(porNome);
+  const ativos = db.funcionarios.filter(f => f.status === 'ativo').length;
+  return `
+  <p class="sub" style="margin-bottom:14px">${ativos} ativo(s) de ${db.funcionarios.length} cadastrado(s)</p>
+  ${lista.length ? `<div class="tabela">
+    <div class="linha cab cols-fun"><span>Nome</span><span>Função</span><span>Contato</span><span>Admissão</span><span>Status</span><span></span></div>
+    ${lista.map(f => `
+      <div class="linha cols-fun">
+        <span class="destaque" data-acao="editarFun" data-id="${f.id}">${esc(f.nome)}</span>
+        <span>${esc(f.funcao) || '—'}</span>
+        <span>${esc(f.contato) || '—'}</span>
+        <span>${dataBR(f.admissao)}</span>
+        <span><b class="tag ${f.status}">${f.status==='ativo'?'Ativo':'Inativo'}</b></span>
+        <span class="acoes-linha">
+          <button class="sec pequeno" data-acao="editarFun" data-id="${f.id}">Editar</button>
+          <button class="sec pequeno" data-acao="alternarFun" data-id="${f.id}">${f.status==='ativo'?'Desativar':'Ativar'}</button>
+          <button class="sec pequeno" data-acao="excluirFun" data-id="${f.id}">Excluir</button>
+        </span>
+      </div>`).join('')}
+  </div>` : vazio('Nenhum funcionário encontrado.')}`;
+}
+const camposFun = (f={}) => `
+  ${campo('Nome *','nome',f.nome||'')}
+  <div class="grade">${campo('Função','funcao',f.funcao||'')}${campo('Contato (telefone / e-mail)','contato',f.contato||'')}</div>
+  <div class="grade">${campo('Data de admissão','admissao',f.admissao||hojeISO(),'date')}${select('Status','status',[['ativo','Ativo'],['inativo','Inativo']],f.status||'ativo')}</div>`;
+acoes.novoFun = () => formulario('Novo funcionário', camposFun(), d => {
+  if (!d.nome) return 'Informe o nome.';
+  db.funcionarios.push({id:uid(), nome:d.nome, funcao:d.funcao, contato:d.contato, admissao:d.admissao, status:d.status||'ativo'});
+  return null;
+});
+acoes.editarFun = id => {
+  const f = achar(db.funcionarios, id);
+  formulario('Editar funcionário', camposFun(f), d => {
+    if (!d.nome) return 'Informe o nome.';
+    Object.assign(f, {nome:d.nome, funcao:d.funcao, contato:d.contato, admissao:d.admissao, status:d.status});
+    return null;
+  });
+};
+acoes.alternarFun = id => {
+  const f = achar(db.funcionarios, id);
+  f.status = f.status === 'ativo' ? 'inativo' : 'ativo';
+  salvar(); render();
+};
+acoes.excluirFun = id => {
+  if (!confirm('Excluir este funcionário?')) return;
+  db.funcionarios = db.funcionarios.filter(f => f.id !== id);
+  salvar(); render();
+};
+
+/* ================= INSUMOS ================= */
+function telaIns(){
+  return `
+  <section class="cabeca">
+    <div><h1>Insumos</h1><p class="sub">Cadastro de insumos e registro de consumo</p></div>
+    <div class="acoes-topo"><button class="sec" data-acao="novoInsumo">+ Insumo</button><button data-acao="novoConsumo">+ Registrar consumo</button></div>
+  </section>
+  <div id="lista"></div>`;
+}
+function listaIns(){
+  const consumos = [...db.consumos].sort((a,b) => b.data.localeCompare(a.data));
+  const totais = db.insumos.map(i => ({i, total: db.consumos.filter(c => c.insumoId === i.id).reduce((s,c) => s + c.qtd, 0)}));
+  return `
+  <h2 class="secao">Insumos cadastrados</h2>
+  ${db.insumos.length ? `<div class="tabela">
+    <div class="linha cab cols-ins"><span>Insumo</span><span>Unidade</span><span class="dir">Total consumido</span><span></span></div>
+    ${totais.map(({i,total}) => `
+      <div class="linha cols-ins">
+        <span class="destaque" data-acao="editarInsumo" data-id="${i.id}">${esc(i.nome)}</span>
+        <span>${esc(i.unidade)}</span>
+        <span class="dir">${fmtQtd(total)} ${esc(i.unidade)}</span>
+        <span class="acoes-linha"><button class="sec pequeno" data-acao="excluirInsumo" data-id="${i.id}">Excluir</button></span>
+      </div>`).join('')}
+  </div>` : vazio('Nenhum insumo cadastrado.')}
+
+  <h2 class="secao">Registro de consumo</h2>
+  ${consumos.length ? `<div class="tabela">
+    <div class="linha cab cols-cons"><span>Data</span><span>Insumo</span><span class="dir">Quantidade</span><span>Observação</span><span></span></div>
+    ${consumos.map(c => {
+      const i = achar(db.insumos, c.insumoId);
+      return `<div class="linha cols-cons">
+        <span>${dataBR(c.data)}</span>
+        <span>${esc(i ? i.nome : '(removido)')}</span>
+        <span class="dir">${fmtQtd(c.qtd)} ${esc(i ? i.unidade : '')}</span>
+        <span>${esc(c.obs)}</span>
+        <span class="acoes-linha"><button class="sec pequeno" data-acao="excluirConsumo" data-id="${c.id}">Excluir</button></span>
+      </div>`;
+    }).join('')}
+  </div>` : vazio('Nenhum consumo registrado.')}`;
+}
+const camposInsumo = (i={}) => `${campo('Nome do insumo *','nome',i.nome||'')}${campo('Unidade de medida','unidade',i.unidade||'un')}`;
+acoes.novoInsumo = () => formulario('Novo insumo', camposInsumo(), d => {
+  if (!d.nome) return 'Informe o nome do insumo.';
+  db.insumos.push({id:uid(), nome:d.nome, unidade:d.unidade||'un'});
+  return null;
+});
+acoes.editarInsumo = id => {
+  const i = achar(db.insumos, id);
+  formulario('Editar insumo', camposInsumo(i), d => {
+    if (!d.nome) return 'Informe o nome do insumo.';
+    Object.assign(i, {nome:d.nome, unidade:d.unidade||'un'});
+    return null;
+  });
+};
+acoes.excluirInsumo = id => {
+  if (!confirm('Excluir o insumo e seus registros de consumo?')) return;
+  db.insumos = db.insumos.filter(i => i.id !== id);
+  db.consumos = db.consumos.filter(c => c.insumoId !== id);
+  salvar(); render();
+};
+acoes.novoConsumo = () => {
+  if (!db.insumos.length) { alert('Cadastre um insumo primeiro.'); return; }
+  formulario('Registrar consumo', `
+    ${select('Insumo','insumoId', db.insumos.map(i => [i.id, i.nome]), db.insumos[0].id)}
+    <div class="grade">${campo('Quantidade *','qtd','','text','inputmode="decimal"')}${campo('Data','data',hojeISO(),'date')}</div>
+    ${campo('Observação','obs','')}`, d => {
+      if (!achar(db.insumos, d.insumoId)) return 'Insumo inválido.';
+      const q = parseValor(d.qtd);
+      if (!(q > 0)) return 'Informe uma quantidade maior que zero.';
+      db.consumos.push({id:uid(), insumoId:d.insumoId, qtd:q, data:d.data||hojeISO(), obs:d.obs});
+      return null;
+  });
+};
+acoes.excluirConsumo = id => {
+  db.consumos = db.consumos.filter(c => c.id !== id);
+  salvar(); render();
+};
+
+/* ---------- backup ---------- */
+document.getElementById('btnBackup').onclick = () =>
+  baixar(`backup_recanto_eco_vida_${hojeISO()}.json`, JSON.stringify(db, null, 2), 'application/json');
+document.getElementById('btnRestaurar').onclick = () => document.getElementById('arquivo').click();
+document.getElementById('arquivo').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!Array.isArray(d.clientes)) throw new Error('formato');
+      if (!confirm('Substituir os dados atuais pelo backup?')) return;
+      db = Object.assign(padrao(), d);
+      salvar(); render();
+    } catch (err) { alert('Arquivo de backup inválido.'); }
+  };
+  r.readAsText(f);
+  e.target.value = '';
+};
+
+/* ---------- inicialização ---------- */
+(async () => {
+  const {data} = await sb.auth.getSession();
+  if (data.session) {
+    try { await entrar(data.session); }
+    catch (err) { console.error(err); document.getElementById('login').classList.remove('hidden'); }
+  } else {
+    document.getElementById('login').classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>
