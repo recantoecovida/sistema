@@ -294,7 +294,7 @@ function paraLinhas(){
   L.funcionarios = db.funcionarios.map(f => ({id:f.id, user_id:USER_ID, nome:f.nome, funcao:f.funcao||null, contato:f.contato||null, admissao:f.admissao||null, status:f.status}));
   L.insumos = db.insumos.map(i => ({id:i.id, user_id:USER_ID, nome:i.nome, unidade:i.unidade||'un'}));
   L.insumos_consumos = db.consumos.map(c => ({id:c.id, user_id:USER_ID, insumo_id:c.insumoId, qtd:c.qtd, data:c.data, obs:c.obs||null}));
-  L.reservas = db.reservas.map(r => ({id:r.id, user_id:USER_ID, nome:r.nome, telefone:r.telefone||null, checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||null}));
+  L.reservas = db.reservas.map(r => ({id:r.id, user_id:USER_ID, cliente_id:r.clienteId||null, nome:r.nome, telefone:r.telefone||null, checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||null}));
   return L;
 }
 
@@ -363,7 +363,7 @@ async function carregarDados(){
     funcionarios: func.map(f => ({id:f.id, nome:f.nome, funcao:f.funcao||'', contato:f.contato||'', admissao:f.admissao||'', status:f.status})),
     insumos: ins.map(i => ({id:i.id, nome:i.nome, unidade:i.unidade})),
     consumos: cons.map(c => ({id:c.id, insumoId:c.insumo_id, qtd:Number(c.qtd), data:c.data, obs:c.obs||''})),
-    reservas: resv.map(r => ({id:r.id, nome:r.nome, telefone:r.telefone||'', checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||''}))
+    reservas: resv.map(r => ({id:r.id, clienteId:r.cliente_id||'', nome:r.nome, telefone:r.telefone||'', checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||''}))
   };
   // snapshot = estado exatamente como veio do banco
   const L = paraLinhas();
@@ -540,7 +540,7 @@ function listaAgenda(){
   </div>
   <h2 class="secao">Reservas do mês</h2>
   ${doMes.length ? `<div class="tabela">
-    <div class="linha cab cols-res"><span>Hóspede</span><span>Check-in</span><span>Check-out</span><span class="dir">Noites</span><span class="dir">Valor</span><span>Status</span><span></span></div>
+    <div class="linha cab cols-res"><span>Cliente</span><span>Check-in</span><span>Check-out</span><span class="dir">Noites</span><span class="dir">Valor</span><span>Status</span><span></span></div>
     ${doMes.map(r => `
       <div class="linha cols-res">
         <span class="destaque" data-acao="verReserva" data-id="${r.id}">${esc(r.nome)}</span>
@@ -556,29 +556,45 @@ function listaAgenda(){
 function camposReserva(r={}, ciPadrao){
   const ci = r.checkin || ciPadrao || hojeISO();
   const co = r.checkout || addDias(ci, 1);
+  const sel = r.clienteId || '';
+  const novo = sel === '__novo__' || (!sel && !db.clientes.length);
+  const clientes = [...db.clientes].sort(porNome).map(c => [c.id, c.nome + (c.telefone ? ' · ' + c.telefone : '')]);
+  const opcoes = [['', 'Selecione um cliente'], ...clientes, ['__novo__', '+ Cadastrar novo cliente']];
   return `
-  ${campo('Nome do hóspede *','nome', r.nome||'')}
-  <div class="grade">${campo('Telefone / WhatsApp','telefone', r.telefone||'')}${select('Status','status',[['pendente','Pendente'],['confirmada','Confirmada'],['cancelada','Cancelada']], r.status||'pendente')}</div>
+  <label class="campo">Cliente *<select name="clienteId" onchange="document.getElementById('bloco-novo').style.display=this.value==='__novo__'?'block':'none'">${opts(opcoes, novo ? '__novo__' : sel)}</select></label>
+  <div id="bloco-novo" style="display:${novo ? 'block' : 'none'}">
+    <div class="grade">${campo('Nome do novo cliente *','novoNome','')}${campo('Telefone / WhatsApp','novoTelefone','')}</div>
+  </div>
   <div class="grade">${campo('Check-in *','checkin', ci, 'date')}${campo('Check-out *','checkout', co, 'date')}</div>
-  <div class="grade">${campo('Valor (R$)','valor', r.valor!=null ? String(r.valor).replace('.',',') : '', 'text', 'inputmode="decimal"')}${campo('Observação','obs', r.obs||'')}</div>`;
+  <div class="grade">${select('Status','status',[['pendente','Pendente'],['confirmada','Confirmada'],['cancelada','Cancelada']], r.status||'pendente')}${campo('Valor (R$)','valor', r.valor!=null ? String(r.valor).replace('.',',') : '', 'text', 'inputmode="decimal"')}</div>
+  ${campo('Observação','obs', r.obs||'')}`;
 }
-function dadosReserva(d){
-  return {nome:d.nome, telefone:d.telefone, checkin:d.checkin, checkout:d.checkout,
+function dadosReserva(d, cli){
+  return {clienteId:cli.id, nome:cli.nome, telefone:cli.telefone||'', checkin:d.checkin, checkout:d.checkout,
           status:d.status||'pendente', valor: d.valor ? parseValor(d.valor) : null, obs:d.obs};
 }
 function validarReserva(d, id){
-  if (!d.nome) return 'Informe o nome do hóspede.';
+  if (d.clienteId === '__novo__') { if (!d.novoNome) return 'Informe o nome do novo cliente.'; }
+  else if (!d.clienteId) return 'Selecione um cliente.';
+  else if (!achar(db.clientes, d.clienteId)) return 'Cliente inválido.';
   if (!d.checkin || !d.checkout) return 'Informe check-in e check-out.';
   if (d.checkout <= d.checkin) return 'O check-out precisa ser depois do check-in.';
   const c = conflito({checkin:d.checkin, checkout:d.checkout, status:d.status||'pendente'}, id);
   if (c) return `Essas datas já estão ocupadas (${c.nome}, de ${dataBR(c.checkin)} a ${dataBR(c.checkout)}).`;
   return null;
 }
+function resolverCliente(d){
+  if (d.clienteId !== '__novo__') return achar(db.clientes, d.clienteId);
+  const c = {id:uid(), tipo:'lead', nome:d.novoNome, telefone:d.novoTelefone||'', email:'', observacoes:'', etapa: db.etapas.length ? 0 : -1, historico:[], criadoEm:hojeISO()};
+  db.clientes.push(c);
+  return c;
+}
 function formReserva(titulo, r, id, ciPadrao){
   formulario(titulo, camposReserva(r, ciPadrao), d => {
     const e = validarReserva(d, id); if (e) return e;
-    if (r && id) Object.assign(r, dadosReserva(d));
-    else db.reservas.push({id:uid(), ...dadosReserva(d)});
+    const dados = dadosReserva(d, resolverCliente(d));
+    if (r && id) Object.assign(r, dados);
+    else db.reservas.push({id:uid(), ...dados});
     return null;
   });
 }
