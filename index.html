@@ -137,10 +137,33 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 .ficha-cab{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .ficha-cab h2{margin:0}
 
+.mes-titulo{text-transform:capitalize;margin:0 0 16px;font-size:18px}
+.calendario{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cal-cab{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:center;font-weight:600;letter-spacing:.06em;padding:4px 0}
+.dia,.dia:hover{position:relative;min-height:74px;border-radius:12px;border:1px solid var(--line);background:#f1f8f4;color:var(--text);padding:8px;text-align:left;display:flex;flex-direction:column;gap:4px;cursor:pointer;font:inherit;font-weight:500;box-shadow:none;transform:none}
+.dia:hover{background:#e1f0ea;border-color:#bcd9cc;color:var(--text)}
+.dia.ocupado,.dia.ocupado:hover{background:var(--plum);border-color:var(--plum);color:#fff}
+.dia.pendente,.dia.pendente:hover{background:var(--warn-soft);border-color:#ecd49a;color:#7a4e0f}
+.dia.passado{opacity:.5}
+.dia.hoje{box-shadow:0 0 0 2px var(--primary) inset}
+.dia.vazio-dia,.dia.vazio-dia:hover{background:transparent;border:0;cursor:default}
+.dia .num{font-size:13px;font-weight:600}
+.dia .nome{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.95}
+.legenda{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:16px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.dot.livre{background:#f1f8f4;border:1px solid #bcd9cc}
+.dot.ocupado{background:var(--plum)}
+.dot.pendente{background:var(--warn-soft);border:1px solid #ecd49a}
+.cols-res{grid-template-columns:1.6fr 1fr 1fr .6fr 1fr 1fr auto}
+.btn-link{display:inline-flex;align-items:center;padding:9px 16px;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--surface);color:var(--primary-dark);text-decoration:none;font-weight:500}
+.btn-link:hover{background:var(--surface-2)}
 @media(max-width:760px){
   .topo{padding:12px 16px}
   main{padding:18px 16px}
-  .cols-crm,.cols-fin,.cols-est,.cols-fun,.cols-ins,.cols-cons,.cols-mov{grid-template-columns:1fr}
+  .cols-crm,.cols-fin,.cols-est,.cols-fun,.cols-ins,.cols-cons,.cols-mov,.cols-res{grid-template-columns:1fr}
+  .dia .nome{display:none}
+  .dia{min-height:52px}
   .linha.cab{display:none}
   .resumo{grid-template-columns:1fr}
   .grade{grid-template-columns:1fr}
@@ -187,8 +210,8 @@ let USER_ID = null;
 
 const MAX_ETAPAS = 6;
 const MAX_CATEGORIAS = 15;
-const ABAS = [['crm','CRM'],['fin','Financeiro'],['est','Estoque'],['fun','Funcionários'],['ins','Insumos']];
-const TABELAS = ['crm_contatos','crm_historico','configuracoes','financeiro_lancamentos','estoque_produtos','estoque_movimentos','funcionarios','insumos','insumos_consumos'];
+const ABAS = [['agenda','Agenda'],['crm','CRM'],['fin','Financeiro'],['est','Estoque'],['fun','Funcionários'],['ins','Insumos']];
+const TABELAS = ['crm_contatos','crm_historico','configuracoes','financeiro_lancamentos','estoque_produtos','estoque_movimentos','funcionarios','insumos','insumos_consumos','reservas'];
 
 /* ---------- utilidades ---------- */
 const acoes = {};
@@ -225,7 +248,7 @@ function setStatus(t){ document.getElementById('status').textContent = t; }
 
 /* ---------- estado ---------- */
 const ui = {busca:'', tipo:'todos', etapa:'todas', ini:primeiroDiaMes(), fim:hojeISO(), tipoLanc:'todos', statusFun:'todos'};
-let aba = 'crm';
+let aba = 'agenda';
 
 function padrao(){
   return {
@@ -237,7 +260,8 @@ function padrao(){
     movimentos: [],
     funcionarios: [],
     insumos: [],
-    consumos: []
+    consumos: [],
+    reservas: []
   };
 }
 let db = padrao();
@@ -270,6 +294,7 @@ function paraLinhas(){
   L.funcionarios = db.funcionarios.map(f => ({id:f.id, user_id:USER_ID, nome:f.nome, funcao:f.funcao||null, contato:f.contato||null, admissao:f.admissao||null, status:f.status}));
   L.insumos = db.insumos.map(i => ({id:i.id, user_id:USER_ID, nome:i.nome, unidade:i.unidade||'un'}));
   L.insumos_consumos = db.consumos.map(c => ({id:c.id, user_id:USER_ID, insumo_id:c.insumoId, qtd:c.qtd, data:c.data, obs:c.obs||null}));
+  L.reservas = db.reservas.map(r => ({id:r.id, user_id:USER_ID, nome:r.nome, telefone:r.telefone||null, checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||null}));
   return L;
 }
 
@@ -320,7 +345,7 @@ async function sincronizar(){
 async function carregarDados(){
   const res = await Promise.all(TABELAS.map(t => sb.from(t).select('*')));
   res.forEach(r => { if (r.error) throw r.error; });
-  const [contatos, hist, cfg, lanc, prod, movs, func, ins, cons] = res.map(r => r.data);
+  const [contatos, hist, cfg, lanc, prod, movs, func, ins, cons, resv] = res.map(r => r.data);
   const conf = Object.fromEntries(cfg.map(c => [c.chave, c.valor]));
   const base = padrao();
   db = {
@@ -337,7 +362,8 @@ async function carregarDados(){
     movimentos: movs.map(m => ({id:m.id, produtoId:m.produto_id, tipo:m.tipo, qtd:Number(m.qtd), data:m.data, obs:m.obs||''})),
     funcionarios: func.map(f => ({id:f.id, nome:f.nome, funcao:f.funcao||'', contato:f.contato||'', admissao:f.admissao||'', status:f.status})),
     insumos: ins.map(i => ({id:i.id, nome:i.nome, unidade:i.unidade})),
-    consumos: cons.map(c => ({id:c.id, insumoId:c.insumo_id, qtd:Number(c.qtd), data:c.data, obs:c.obs||''}))
+    consumos: cons.map(c => ({id:c.id, insumoId:c.insumo_id, qtd:Number(c.qtd), data:c.data, obs:c.obs||''})),
+    reservas: resv.map(r => ({id:r.id, nome:r.nome, telefone:r.telefone||'', checkin:r.checkin, checkout:r.checkout, valor:r.valor==null?null:Number(r.valor), status:r.status, obs:r.obs||''}))
   };
   // snapshot = estado exatamente como veio do banco
   const L = paraLinhas();
@@ -353,7 +379,7 @@ async function entrar(session){
   await carregarDados();
   document.getElementById('login').classList.add('hidden');
   document.body.classList.remove('deslogado');
-  aba = 'crm';
+  aba = 'agenda';
   render();
   salvar();
 }
@@ -419,17 +445,187 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(
 const app = document.getElementById('app');
 function render(){
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('ativo', b.dataset.aba === aba));
-  const telas = {crm:telaCRM, fin:telaFin, est:telaEst, fun:telaFun, ins:telaIns};
+  const telas = {agenda:telaAgenda, crm:telaCRM, fin:telaFin, est:telaEst, fun:telaFun, ins:telaIns};
   app.innerHTML = telas[aba]();
   renderLista();
 }
 function renderLista(){
   const el = document.getElementById('lista');
   if (!el) return;
-  const listas = {crm:listaCRM, fin:listaFin, est:listaEst, fun:listaFun, ins:listaIns};
+  const listas = {agenda:listaAgenda, crm:listaCRM, fin:listaFin, est:listaEst, fun:listaFun, ins:listaIns};
   el.innerHTML = listas[aba]();
 }
 document.getElementById('nav').innerHTML = ABAS.map(([k,t]) => `<button data-aba="${k}">${t}</button>`).join('');
+
+/* ================= AGENDA ================= */
+ui.mes = hojeISO().slice(0,7);
+const pad2 = n => String(n).padStart(2,'0');
+function addDias(iso, n){
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+function diffNoites(a, b){ return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+function mapaNoites(ignorarId){
+  const m = {};
+  db.reservas.forEach(r => {
+    if (r.status === 'cancelada' || r.id === ignorarId) return;
+    for (let d = r.checkin; d < r.checkout; d = addDias(d, 1)) m[d] = r;
+  });
+  return m;
+}
+function conflito(r, ignorarId){
+  if (r.status === 'cancelada') return null;
+  return db.reservas.find(o => o.id !== ignorarId && o.status !== 'cancelada' && o.checkin < r.checkout && r.checkin < o.checkout) || null;
+}
+const STATUS_RES = {pendente:['Pendente','ouro'], confirmada:['Confirmada','verde'], cancelada:['Cancelada','verm']};
+
+function telaAgenda(){
+  return `
+  <section class="cabeca">
+    <div><h1>Agenda</h1><p class="sub">Dias locados e disponíveis</p></div>
+    <div class="acoes-topo">
+      <button class="sec" data-acao="mesAnt" title="Mês anterior">‹</button>
+      <button class="sec" data-acao="mesHoje">Hoje</button>
+      <button class="sec" data-acao="mesProx" title="Próximo mês">›</button>
+      <button data-acao="novaReserva">+ Reserva</button>
+    </div>
+  </section>
+  <div id="lista"></div>`;
+}
+function listaAgenda(){
+  const [ano, mes] = ui.mes.split('-').map(Number);
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const primeiroDia = new Date(ano, mes - 1, 1).getDay();
+  const ini = `${ano}-${pad2(mes)}-01`;
+  const fim = `${ano}-${pad2(mes)}-${pad2(diasNoMes)}`;
+  const nomeMes = new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+  const mapa = mapaNoites();
+  const hoje = hojeISO();
+  let locados = 0;
+  const celulas = Array.from({length: primeiroDia}, () => '<div class="dia vazio-dia"></div>');
+  for (let d = 1; d <= diasNoMes; d++){
+    const ds = `${ano}-${pad2(mes)}-${pad2(d)}`;
+    const r = mapa[ds];
+    if (r) locados++;
+    const classe = r ? (r.status === 'confirmada' ? 'ocupado' : 'pendente') : 'livre';
+    const acao = r ? `data-acao="verReserva" data-id="${r.id}"` : `data-acao="novaReservaEm" data-id="${ds}"`;
+    celulas.push(`<button class="dia ${classe} ${ds < hoje ? 'passado' : ''} ${ds === hoje ? 'hoje' : ''}" ${acao} title="${r ? esc(r.nome) : 'Disponível'}">
+      <span class="num">${d}</span>
+      ${r && r.checkin === ds ? `<span class="nome">${esc(r.nome)}</span>` : ''}
+    </button>`);
+  }
+  const livres = diasNoMes - locados;
+  const doMes = db.reservas
+    .filter(r => r.checkin <= fim && r.checkout > ini)
+    .sort((a,b) => a.checkin.localeCompare(b.checkin));
+  const pendentes = doMes.filter(r => r.status === 'pendente').length;
+  return `
+  <section class="resumo">
+    <div class="card"><span>Dias locados</span><b class="verm">${locados}</b></div>
+    <div class="card"><span>Dias disponíveis</span><b class="verde">${livres}</b></div>
+    <div class="card destaque-card"><span>Reservas pendentes</span><b>${pendentes}</b></div>
+  </section>
+  <div class="calendario">
+    <h2 class="mes-titulo">${nomeMes}</h2>
+    <div class="cal-grid">
+      ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(s => `<div class="cal-cab">${s}</div>`).join('')}
+      ${celulas.join('')}
+    </div>
+    <div class="legenda">
+      <span><i class="dot livre"></i>Disponível</span>
+      <span><i class="dot pendente"></i>Pendente</span>
+      <span><i class="dot ocupado"></i>Confirmada</span>
+    </div>
+  </div>
+  <h2 class="secao">Reservas do mês</h2>
+  ${doMes.length ? `<div class="tabela">
+    <div class="linha cab cols-res"><span>Hóspede</span><span>Check-in</span><span>Check-out</span><span class="dir">Noites</span><span class="dir">Valor</span><span>Status</span><span></span></div>
+    ${doMes.map(r => `
+      <div class="linha cols-res">
+        <span class="destaque" data-acao="verReserva" data-id="${r.id}">${esc(r.nome)}</span>
+        <span>${dataBR(r.checkin)}</span>
+        <span>${dataBR(r.checkout)}</span>
+        <span class="dir">${diffNoites(r.checkin, r.checkout)}</span>
+        <span class="dir">${r.valor != null ? moeda(r.valor) : '—'}</span>
+        <span><b class="tag ${STATUS_RES[r.status][1]}">${STATUS_RES[r.status][0]}</b></span>
+        <span class="acoes-linha"><button class="sec pequeno" data-acao="verReserva" data-id="${r.id}">Abrir</button></span>
+      </div>`).join('')}
+  </div>` : vazio('Nenhuma reserva neste mês.')}`;
+}
+function camposReserva(r={}, ciPadrao){
+  const ci = r.checkin || ciPadrao || hojeISO();
+  const co = r.checkout || addDias(ci, 1);
+  return `
+  ${campo('Nome do hóspede *','nome', r.nome||'')}
+  <div class="grade">${campo('Telefone / WhatsApp','telefone', r.telefone||'')}${select('Status','status',[['pendente','Pendente'],['confirmada','Confirmada'],['cancelada','Cancelada']], r.status||'pendente')}</div>
+  <div class="grade">${campo('Check-in *','checkin', ci, 'date')}${campo('Check-out *','checkout', co, 'date')}</div>
+  <div class="grade">${campo('Valor (R$)','valor', r.valor!=null ? String(r.valor).replace('.',',') : '', 'text', 'inputmode="decimal"')}${campo('Observação','obs', r.obs||'')}</div>`;
+}
+function dadosReserva(d){
+  return {nome:d.nome, telefone:d.telefone, checkin:d.checkin, checkout:d.checkout,
+          status:d.status||'pendente', valor: d.valor ? parseValor(d.valor) : null, obs:d.obs};
+}
+function validarReserva(d, id){
+  if (!d.nome) return 'Informe o nome do hóspede.';
+  if (!d.checkin || !d.checkout) return 'Informe check-in e check-out.';
+  if (d.checkout <= d.checkin) return 'O check-out precisa ser depois do check-in.';
+  const c = conflito({checkin:d.checkin, checkout:d.checkout, status:d.status||'pendente'}, id);
+  if (c) return `Essas datas já estão ocupadas (${c.nome}, de ${dataBR(c.checkin)} a ${dataBR(c.checkout)}).`;
+  return null;
+}
+function formReserva(titulo, r, id, ciPadrao){
+  formulario(titulo, camposReserva(r, ciPadrao), d => {
+    const e = validarReserva(d, id); if (e) return e;
+    if (r && id) Object.assign(r, dadosReserva(d));
+    else db.reservas.push({id:uid(), ...dadosReserva(d)});
+    return null;
+  });
+}
+function mudaMes(n){
+  const [a, m] = ui.mes.split('-').map(Number);
+  const d = new Date(a, m - 1 + n, 1);
+  ui.mes = `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+  render();
+}
+acoes.mesAnt = () => mudaMes(-1);
+acoes.mesProx = () => mudaMes(1);
+acoes.mesHoje = () => { ui.mes = hojeISO().slice(0,7); render(); };
+acoes.novaReserva = () => formReserva('Nova reserva', undefined, null, null);
+acoes.novaReservaEm = ds => formReserva('Nova reserva', undefined, null, ds);
+acoes.editarReserva = id => formReserva('Editar reserva', achar(db.reservas, id), id, null);
+acoes.verReserva = id => {
+  const r = achar(db.reservas, id);
+  if (!r) return;
+  const n = diffNoites(r.checkin, r.checkout);
+  const digitos = (r.telefone || '').replace(/\D/g, '');
+  const wa = digitos ? `https://wa.me/${digitos.startsWith('55') ? digitos : '55' + digitos}` : '';
+  const [rotulo, cor] = STATUS_RES[r.status];
+  abrirModal(`
+    <div class="ficha-cab"><h2>${esc(r.nome)}</h2><span class="tag ${cor}">${rotulo}</span></div>
+    <p class="sub">${esc(r.telefone) || 'Sem telefone'}</p>
+    <div class="bloco">
+      <p><b>Check-in:</b> ${dataBR(r.checkin)} &nbsp;·&nbsp; <b>Check-out:</b> ${dataBR(r.checkout)} &nbsp;·&nbsp; ${n} noite(s)</p>
+      <p><b>Valor:</b> ${r.valor != null ? moeda(r.valor) : 'não informado'}</p>
+      ${r.obs ? `<p><b>Obs.:</b> ${esc(r.obs)}</p>` : ''}
+    </div>
+    <div class="botoes">
+      <button class="perigo" data-acao="excluirReserva" data-id="${r.id}">Excluir</button>
+      ${wa ? `<a class="btn-link" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+      ${r.status === 'pendente' ? `<button class="sec" data-acao="confirmarReserva" data-id="${r.id}">Confirmar</button>` : ''}
+      <button class="sec" data-acao="editarReserva" data-id="${r.id}">Editar</button>
+      <button class="sec" data-fechar>Fechar</button>
+    </div>`);
+};
+acoes.confirmarReserva = id => {
+  achar(db.reservas, id).status = 'confirmada';
+  salvar(); render(); acoes.verReserva(id);
+};
+acoes.excluirReserva = id => {
+  if (!confirm('Excluir esta reserva?')) return;
+  db.reservas = db.reservas.filter(r => r.id !== id);
+  salvar(); fecharModal(); render();
+};
 
 /* ================= CRM ================= */
 function telaCRM(){
